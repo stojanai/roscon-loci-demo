@@ -26,17 +26,11 @@ The "bug" (see `patches/speed-smoothing-bug.patch`): someone adds a
 
 ## Setup (fresh clone)
 
-`ardupilot/`, `toolchain/`, and `venv/` are git-ignored (huge / vendored). To
-rebuild from a fresh clone:
+`ardupilot/`, `toolchain/`, and `venv/` are git-ignored (huge / vendored).
+**Full step-by-step build instructions are in [`BUILD.md`](BUILD.md).**
 
-```
-git clone --depth 1 --branch Copter-4.6.2 https://github.com/ArduPilot/ardupilot.git
-cd ardupilot && git submodule update --init --recursive --depth 1 && cd ..
-python3 -m venv venv && ./venv/bin/pip install empy==3.3.4 pexpect future pymavlink MAVProxy dronecan gnureadline wxPython pillow matplotlib opencv-python
-# ARM toolchain (no sudo): extract ARM GNU 15.3 arm-none-eabi into ./toolchain/
-```
-
-The pre-built ELFs in `artifacts/` let you run LOCI immediately without building.
+The pre-built ELFs in `artifacts/` let you run LOCI immediately without building
+anything — see the "Just run LOCI" section of `BUILD.md`.
 
 ## Layout
 
