@@ -1,0 +1,15 @@
+# Vendored / derived — rebuildable, huge, or another repo's clone (see README setup)
+ardupilot/
+toolchain/
+venv/
+.loci-build/
+*.tar.xz
+
+# SITL telemetry logs
+mav.tlog
+mav.tlog.raw
+*.tlog
+*.tlog.raw
+
+# OS cruft
+.DS_Store

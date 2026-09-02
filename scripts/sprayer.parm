@@ -1,0 +1,16 @@
+# Sprayer demo parameters (loaded by run_sitl.sh)
+SPRAY_ENABLE 1
+SPRAY_PUMP_RATE 10
+SPRAY_SPEED_MIN 100
+SPRAY_PUMP_MIN 0
+# pump on SERVO10 (function 22), spinner on SERVO11 (function 23)
+SERVO10_FUNCTION 22
+SERVO11_FUNCTION 23
+# SITL sprayer physics sim: track payload mass draining from the tank
+SIM_SPR_ENABLE 1
+SIM_SPR_PUMP 10
+SIM_SPR_SPIN 11
+# demo comfort: no battery-percentage warnings/failsafe during a long talk
+BATT_CAPACITY 0
+BATT_LOW_VOLT 0
+BATT_CRT_VOLT 0

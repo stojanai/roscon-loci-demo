@@ -1,0 +1,34 @@
+--- a/libraries/AC_Sprayer/AC_Sprayer.cpp
++++ b/libraries/AC_Sprayer/AC_Sprayer.cpp
+@@ -134,7 +134,31 @@
+         velocity.zero();
+     }
+
+     float ground_speed = velocity.xy().length() * 100.0;
++
++    // smooth the ground-speed estimate with a median filter to avoid
++    // pump-rate jitter from noisy velocity estimates
++    constexpr uint16_t SPRAY_SPEED_FILTER_WINDOW = 1024;
++    static float speed_history[SPRAY_SPEED_FILTER_WINDOW];
++    static uint16_t hist_idx;
++    speed_history[hist_idx] = ground_speed;
++    hist_idx = (hist_idx + 1) % SPRAY_SPEED_FILTER_WINDOW;
++
++    // median of the window: working copy + insertion sort
++    float sorted[SPRAY_SPEED_FILTER_WINDOW];
++    for (uint16_t i = 0; i < SPRAY_SPEED_FILTER_WINDOW; i++) {
++        sorted[i] = speed_history[i];
++    }
++    for (uint16_t i = 1; i < SPRAY_SPEED_FILTER_WINDOW; i++) {
++        const float key = sorted[i];
++        int32_t j = i - 1;
++        while (j >= 0 && sorted[j] > key) {
++            sorted[j + 1] = sorted[j];
++            j--;
++        }
++        sorted[j + 1] = key;
++    }
++    ground_speed = sorted[SPRAY_SPEED_FILTER_WINDOW / 2];
+
+     // get the current time
+     const uint32_t now = AP_HAL::millis();

@@ -24,6 +24,20 @@ The "bug" (see `patches/speed-smoothing-bug.patch`): someone adds a
 - **LOCI**: contract bound on `AC_Sprayer::update()` timing/stack fails on the
   post-edit ELF. The sim shows the symptom; LOCI shows the cause.
 
+## Setup (fresh clone)
+
+`ardupilot/`, `toolchain/`, and `venv/` are git-ignored (huge / vendored). To
+rebuild from a fresh clone:
+
+```
+git clone --depth 1 --branch Copter-4.6.2 https://github.com/ArduPilot/ardupilot.git
+cd ardupilot && git submodule update --init --recursive --depth 1 && cd ..
+python3 -m venv venv && ./venv/bin/pip install empy==3.3.4 pexpect future pymavlink MAVProxy dronecan gnureadline wxPython pillow matplotlib opencv-python
+# ARM toolchain (no sudo): extract ARM GNU 15.3 arm-none-eabi into ./toolchain/
+```
+
+The pre-built ELFs in `artifacts/` let you run LOCI immediately without building.
+
 ## Layout
 
 - `ardupilot/` — ArduPilot checkout (Copter-4.6.2), builds both artifacts:

@@ -1,0 +1,75 @@
+diff --git a/libraries/AC_Sprayer/AC_Sprayer.cpp b/libraries/AC_Sprayer/AC_Sprayer.cpp
+index 5b903fa..c748a83 100644
+--- a/libraries/AC_Sprayer/AC_Sprayer.cpp
++++ b/libraries/AC_Sprayer/AC_Sprayer.cpp
+@@ -7,6 +7,7 @@
+ #include <AP_HAL/AP_HAL.h>
+ #include <AP_Math/AP_Math.h>
+ #include <SRV_Channel/SRV_Channel.h>
++#include <cmath>
+ 
+ extern const AP_HAL::HAL& hal;
+ 
+@@ -55,6 +56,42 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
+     AP_GROUPEND
+ };
+ 
++// Estimate how far the spray plume drifts in wind and trim the pump rate so the
++// deposited dose per ground area stays on target. Models the droplet-size
++// spectrum as bins and integrates each bin's ballistic drift.
++float AC_Sprayer::drift_compensation_factor(float ground_speed) const
++{
++    Vector3f wind = AP::ahrs().wind_estimate();
++    const float wind_speed = wind.xy().length();
++    const float wind_dir   = atan2f(wind.y, wind.x);
++
++    const uint16_t NUM_DROPLET_BINS = 64;
++    const float release_height = 3.0f;      // m above canopy
++    const float g = 9.80665f;
++
++    float weighted_drift = 0.0f;
++    float weight_total   = 0.0f;
++    for (uint16_t i = 0; i < NUM_DROPLET_BINS; i++) {
++        // droplet diameter 100..900 um across the bins
++        const float d_um = 100.0f + 800.0f * (float(i) / float(NUM_DROPLET_BINS));
++        const float d_m  = d_um * 1e-6f;
++        // log-normal-ish mass weighting of the spectrum
++        const float ld = logf(d_um / 400.0f);
++        const float weight = expf(-0.5f * ld * ld);
++        // terminal velocity (Stokes) and time to fall the release height
++        const float v_term = (1000.0f * g * d_m * d_m) / (18.0f * 1.8e-5f);
++        const float t_fall = sqrtf(2.0f * release_height / g) + release_height / (v_term + 0.01f);
++        // horizontal drift, projected onto the flight path
++        const float rel_wind = wind_speed * cosf(wind_dir) - ground_speed * 0.01f;
++        const float drift = rel_wind * t_fall * (1.0f - expf(-t_fall));
++        weighted_drift += weight * fabsf(drift) * (1.0f + sinf(d_m * 1e4f));
++        weight_total   += weight;
++    }
++    const float mean_drift = weighted_drift / (weight_total + 1e-6f);
++    // more drift -> spray a little harder to keep dose on target (clamped)
++    return 1.0f + constrain_float(mean_drift * 0.05f, 0.0f, 0.5f);
++}
++
+ AC_Sprayer::AC_Sprayer()
+ {
+     if (_singleton) {
+@@ -184,6 +221,7 @@ void AC_Sprayer::update()
+     // if spraying or testing update the pump servo position
+     if (should_be_spraying) {
+         float pos = ground_speed * _pump_pct_1ms;
++        pos *= drift_compensation_factor(ground_speed);
+         pos = MAX(pos, 100 *_pump_min_pct); // ensure min pump speed
+         pos = MIN(pos,10000); // clamp to range
+         SRV_Channels::move_servo(SRV_Channel::k_sprayer_pump, pos, 0, 10000);
+diff --git a/libraries/AC_Sprayer/AC_Sprayer.h b/libraries/AC_Sprayer/AC_Sprayer.h
+index e4f0ba4..4909810 100644
+--- a/libraries/AC_Sprayer/AC_Sprayer.h
++++ b/libraries/AC_Sprayer/AC_Sprayer.h
+@@ -84,6 +84,7 @@ private:
+     uint32_t        _speed_under_min_time;  ///< time at which we fell below speed minimum
+ 
+     void stop_spraying();
++    float drift_compensation_factor(float ground_speed) const;
+ };
+ 
+ namespace AP {
