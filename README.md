@@ -174,49 +174,4 @@ SPRAY_SPEED_MIN (1 m/s, ~1 s engage delay). Baseline: pump tracks speed within
 a second. Bugged build: pump stays near minimum for minutes regardless of speed
 (median of 1024 samples @ 3 Hz is still dominated by on-ground zeros).
 `long DO_SPRAYER 0` turns spraying off.
-
-## Vineyard spray mission (Kavadarci / Tikveš)
-
-A full field-coverage demo over a real vineyard block (41.4402 N, 21.9002 E).
-Files in `mission/`:
-
-- `kavadarci_spray.waypoints` — QGC WPL 110 mission: takeoff → `DO_SPRAYER ON`
-  → 7-row boustrophedon coverage (5 m spacing, 0.43 ha) → `DO_SPRAYER OFF` → RTL
-- `spray_map.html` — visual coverage map (field boundary + serpentine path,
-  amber = spray pass, grey = turnaround). Open in a browser.
-- `plan.json` — the computed plan (waypoints, area, length)
-
-Regenerate for a different field by editing the four corner `corners=[…]` in
-the planner and re-running it (see git history), or hand-edit the coordinates.
-
-### Fly it with the moving-map (run in YOUR OWN terminal)
-
-MAVProxy's map needs a real terminal, so launch from your shell — not from an
-automated tool:
-
-```
-./scripts/fly_visual.sh
-```
-
-Two windows open (on macOS they may sit **behind** the terminal — Cmd+Tab).
-Wait until the console shows GPS/EKF ready (~30–60 s IMU warmup is normal),
-then type at the `MAV>` prompt:
-
-```
-wp load mission/kavadarci_spray.waypoints    # absolute path is safest
-mode guided
-arm throttle
-takeoff 15
-long DO_SPRAYER 1
-mode auto
-graph SERVO_OUTPUT_RAW.servo10_raw           # optional: live pump plot
-```
-
-The drone flies the 7-row coverage; the pump (servo10) tracks ground speed.
-`mode rtl` returns home; Ctrl-C stops everything.
-
-> Use MAVProxy's `wp load` to upload the mission — it's the reliable path.
-> The headless `scripts/fly_spray.py` controller is experimental (its pymavlink
-> mission-upload can silently land 0 waypoints, leaving the drone hovering).
-
 # roscon-loci-demo
