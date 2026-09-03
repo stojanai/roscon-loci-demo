@@ -139,6 +139,14 @@
   .arrow{color:var(--ink-faint);padding:0 8px}
   .footnote{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-top:18px}
 
+  .review{margin-top:22px;background:#ff6a5c0d;border:1px solid #ff6a5c33;
+    border-radius:10px;padding:16px 18px;display:flex;flex-direction:column;gap:9px}
+  .review .rlab{font-family:var(--mono);font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--coral);margin-bottom:2px}
+  .review .ritem{font-size:14px;line-height:1.45;color:var(--ink-dim);padding-left:18px;position:relative}
+  .review .ritem::before{content:"×";position:absolute;left:0;color:var(--coral);font-weight:700}
+  .review .ritem b{color:var(--ink);font-weight:600}
+
   .title-meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:40px;
     font-family:var(--mono);font-size:13px;color:var(--ink-dim);letter-spacing:.04em}
   .title-meta b{color:var(--ink);font-weight:600}
@@ -197,19 +205,25 @@
       <div class="eyebrow">Case 1 · the edit a reviewer approves</div>
       <h2>"Let's smooth the speed estimate."</h2>
       <div class="grid2" style="margin-top:30px;align-items:start">
-        <pre><span class="c">// median filter over the last 1024 samples</span>
-<span class="add"><span class="k">static float</span> speed_history[<span class="n">1024</span>];</span>
-<span class="add"><span class="k">float</span> sorted[<span class="n">1024</span>];              <span class="c">// &larr; local</span></span>
-<span class="add"><span class="k">for</span> (i=<span class="n">0</span>;i&lt;<span class="n">1024</span>;i++) sorted[i]=history[i];</span>
-<span class="add"><span class="c">// insertion sort … O(n²)</span></span>
-<span class="add"><span class="k">for</span> (i=<span class="n">1</span>;i&lt;<span class="n">1024</span>;i++){ …swap… }</span>
-ground_speed = sorted[<span class="n">512</span>];</pre>
+        <pre><span class="c">// smooth ground speed with a median filter</span>
+<span class="add"><span class="k">constexpr uint16_t</span> WINDOW = <span class="n">1024</span>;</span>
+<span class="add"><span class="k">static float</span> speed_history[WINDOW];</span>
+<span class="add">speed_history[idx] = ground_speed;</span>
+<span class="add">idx = (idx + <span class="n">1</span>) % WINDOW;</span>
+<span class="add"><span class="k">float</span> sorted[WINDOW];             <span class="c">// local copy</span></span>
+<span class="add"><span class="k">for</span> (i=<span class="n">0</span>;i&lt;WINDOW;i++) sorted[i]=speed_history[i];</span>
+<span class="add"><span class="k">for</span> (i=<span class="n">1</span>;i&lt;WINDOW;i++){ <span class="c">/* insertion sort */</span> }</span>
+ground_speed = sorted[WINDOW/<span class="n">2</span>];  <span class="c">// median</span></pre>
         <div>
-          <p class="lead" style="margin-top:0">It looks like good engineering.
-          It compiles without a warning. In SITL the drone flies.</p>
-          <p class="kicker">Two things hide in plain sight:<br>
-          &nbsp;· <span class="amber">float sorted[1024]</span> — a 4&nbsp;KB array on the stack<br>
-          &nbsp;· an <span class="amber">O(n²) sort</span> — every single call</p>
+          <p class="lead" style="margin-top:0">Reads like good engineering.
+          Compiles without a warning. Flies fine in SITL.</p>
+          <div class="review">
+            <div class="rlab">Why review waves it through</div>
+            <span class="ritem"><b class="teal">WINDOW</b> is a named constant — no magic number to flag</span>
+            <span class="ritem">"median filter" is a <b>textbook</b> denoise pattern</span>
+            <span class="ritem">the array is a <b>local</b> — its stack cost isn't in the diff</span>
+            <span class="ritem">1024 &times; 3&nbsp;Hz feels fine until you know the update <b>rate</b></span>
+          </div>
         </div>
       </div>
     </div>
@@ -248,21 +262,25 @@ ground_speed = sorted[<span class="n">512</span>];</pre>
       <div class="eyebrow">Case 2 · a different, plausible edit</div>
       <h2>"Compensate for wind drift."</h2>
       <div class="grid2" style="margin-top:30px;align-items:start">
-        <pre><span class="c">// integrate drift over 64 droplet-size bins</span>
-<span class="add"><span class="k">for</span> (i=<span class="n">0</span>; i&lt;<span class="n">64</span>; i++){</span>
-<span class="add">  w  = expf(-<span class="n">0.5</span>*ld*ld);</span>
-<span class="add">  t  = sqrtf(<span class="n">2</span>*h/g) + h/(v+<span class="n">0.01</span>);</span>
-<span class="add">  rw = wind*cosf(dir) - gs*<span class="n">0.01</span>;</span>
+        <pre><span class="c">// drift-compensate over 64 droplet-size bins</span>
+<span class="add"><span class="k">for</span> (i=<span class="n">0</span>; i&lt;NUM_BINS; i++){</span>
+<span class="add">  w  = expf(-<span class="n">0.5</span>*ld*ld);        <span class="c">// mass weight</span></span>
+<span class="add">  t  = sqrtf(<span class="n">2</span>*h/g) + h/(v+eps);  <span class="c">// fall time</span></span>
+<span class="add">  rw = wind*cosf(dir) - gs*<span class="n">0.01</span>;  <span class="c">// rel. wind</span></span>
 <span class="add">  drift += w*fabsf(rw*t)*(<span class="n">1</span>+sinf(d));</span>
 <span class="add">}</span>
-pos *= <span class="n">1</span> + drift*<span class="n">0.05</span>;</pre>
+pos *= drift_compensation_factor(gs);</pre>
         <div>
           <p class="lead" style="margin-top:0">Tiny stack. Compiles clean.
-          Flies fine in SITL. A different failure class entirely —
-          this one is a <span class="amber">timing bomb</span>.</p>
-          <p class="kicker">64 iterations × transcendental math
-          (<span class="amber">sinf · cosf · expf · logf · sqrtf</span>),
-          buried in a new helper the sprayer calls every update.</p>
+          Flies fine in SITL. A different failure class —
+          a <span class="amber">timing bomb</span>.</p>
+          <div class="review">
+            <div class="rlab">Why review waves it through</div>
+            <span class="ritem">every line is <b>plausible physics</b> — reviewers nod along</span>
+            <span class="ritem">no loops look nested; the cost is <b>per-iteration</b> math</span>
+            <span class="ritem"><b class="amber">sinf/cosf/expf</b> look like "just a multiply" in C</span>
+            <span class="ritem">it's a <b>new helper</b> — the call site is a one-line diff</span>
+          </div>
         </div>
       </div>
     </div>
