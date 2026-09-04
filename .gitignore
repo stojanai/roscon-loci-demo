@@ -11,5 +11,10 @@ mav.tlog.raw
 *.tlog
 *.tlog.raw
 
+# LOCI bug-report / repro artifacts (transient)
+loci-repro-*/
+loci-repro-*.zip
+report-*-darwin.md
+
 # OS cruft
 .DS_Store

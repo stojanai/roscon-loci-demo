@@ -139,6 +139,13 @@
   .arrow{color:var(--ink-faint);padding:0 8px}
   .footnote{font-family:var(--mono);font-size:12px;color:var(--ink-faint);margin-top:18px}
 
+  .motiv{font-size:clamp(14px,1.5vw,18px);line-height:1.5;color:var(--ink-dim);
+    max-width:64ch;margin:12px 0 22px;border-left:2px solid var(--teal);padding-left:16px}
+  .motiv b{color:var(--ink);font-weight:600}
+  .realworld{margin-top:20px;font-family:var(--mono);font-size:12px;line-height:1.55;
+    color:var(--ink-faint);border-top:1px solid var(--line);padding-top:13px;max-width:70ch}
+  .realworld .rw{color:var(--teal);letter-spacing:.14em;text-transform:uppercase;margin-right:8px}
+
   .title-meta{display:flex;gap:28px;flex-wrap:wrap;margin-top:40px;
     font-family:var(--mono);font-size:13px;color:var(--ink-dim);letter-spacing:.04em}
   .title-meta b{color:var(--ink);font-weight:600}
@@ -196,7 +203,11 @@
     <div class="wrap">
       <div class="eyebrow">Case 1 · the edit a reviewer approves</div>
       <h2>"Let's smooth the speed estimate."</h2>
-      <div class="grid2" style="margin-top:30px;align-items:start">
+      <p class="motiv"><b>The motivation:</b> the EKF's ground-speed estimate is
+      noisy, so pump rate jitters and the field gets streaky, uneven dose. A
+      developer adds a <b>median filter</b> to clean it up — textbook signal
+      hygiene, and pump flow is genuinely tied to speed in real spray systems.</p>
+      <div class="grid2" style="margin-top:6px;align-items:start">
         <pre><span class="c">// median filter over the last 1024 samples</span>
 <span class="add"><span class="k">static float</span> speed_history[<span class="n">1024</span>];</span>
 <span class="add"><span class="k">float</span> sorted[<span class="n">1024</span>];              <span class="c">// &larr; local</span></span>
@@ -212,6 +223,10 @@ ground_speed = sorted[<span class="n">512</span>];</pre>
           &nbsp;· an <span class="amber">O(n²) sort</span> — every single call</p>
         </div>
       </div>
+      <p class="realworld"><span class="rw">Real problem</span>large local arrays
+      overflowing a shared RTOS task stack is a documented embedded pitfall —
+      written up by IAR, Embedded.com, and Memfault's Interrupt blog
+      ("Measuring Stack Usage"). It's the exact failure LOCI reads from the frame.</p>
     </div>
   </section>
 
@@ -247,7 +262,11 @@ ground_speed = sorted[<span class="n">512</span>];</pre>
     <div class="wrap">
       <div class="eyebrow">Case 2 · a different, plausible edit</div>
       <h2>"Compensate for wind drift."</h2>
-      <div class="grid2" style="margin-top:30px;align-items:start">
+      <p class="motiv"><b>The motivation:</b> wind blows the spray plume sideways,
+      so chemical lands on the wrong rows — waste, and off-target damage. A
+      developer adds a <b>droplet-drift physics model</b> to trim pump rate and
+      keep dose-per-area on target. Real agronomy, not a toy.</p>
+      <div class="grid2" style="margin-top:6px;align-items:start">
         <pre><span class="c">// integrate drift over 64 droplet-size bins</span>
 <span class="add"><span class="k">for</span> (i=<span class="n">0</span>; i&lt;<span class="n">64</span>; i++){</span>
 <span class="add">  w  = expf(-<span class="n">0.5</span>*ld*ld);</span>
@@ -265,6 +284,10 @@ pos *= <span class="n">1</span> + drift*<span class="n">0.05</span>;</pre>
           buried in a new helper the sprayer calls every update.</p>
         </div>
       </div>
+      <p class="realworld"><span class="rw">Real problem</span>variable-rate &amp;
+      drift/lag-compensated spraying is active UAV research — e.g. the PWM
+      "lag-compensation algorithm" work and automatic wind-drift systems.
+      The physics is real; its per-cycle CPU cost is what nobody measures.</p>
     </div>
   </section>
 

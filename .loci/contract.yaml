@@ -1,0 +1,16 @@
+version: 1
+
+entries:
+  - text: "AC_Sprayer::update must run in under 50 µs"
+    kind: budget
+    function: "AC_Sprayer::update"
+    signal: worst_path_time
+    bound: { max: 50000, unit: ns }
+    severity: fail
+
+  - text: "AC_Sprayer::update must use no more than 512 B of stack"
+    kind: budget
+    function: "AC_Sprayer::update"
+    signal: stack_depth
+    bound: { max: 512, unit: B }
+    severity: fail
