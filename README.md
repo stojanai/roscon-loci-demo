@@ -158,10 +158,21 @@ project directory; the demo root is fine too but the ardupilot checkout is
 what gets analyzed) and:
 
 1. `/contract` — set stack/timing bounds on `AC_Sprayer::update`
+   (see [`CONTRACT.md`](CONTRACT.md) for the exact bounds, the `/contract`
+   wording, and the rationale)
 2. `scripts/build_fw.sh baseline` → ask for stack-depth / exec-trace on
    `build/CubeOrange/bin/arducopter` → bounds pass
 3. `scripts/build_fw.sh bugged` → re-run analysis → contract FAILS
    (timing + 4 KB stack jump)
+
+**Contract bounds** (`ardupilot/.loci/contract.yaml`, full detail in
+[`CONTRACT.md`](CONTRACT.md)):
+
+| Function | Signal | Bound | Bug that breaks it |
+|---|---|---|---|
+| `AC_Sprayer::update` | timing | ≤ 50 µs | Case 2 → ~106 µs |
+| `AC_Sprayer::update` | stack | ≤ 512 B | Case 1 → 4240 B |
+| `ModeGuided::set_velaccel` | timing | ≤ 10 µs | Case 3 → 30 µs |
 
 ## SITL visual (audience view)
 
