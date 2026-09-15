@@ -1,0 +1,50 @@
+version: 1
+
+entries:
+  - text: "acsprayer:update worst case path should not be higher 1700 ns"
+    kind: budget
+    function: "AC_Sprayer::update"
+    signal: worst_path_time
+    bound: { max: 1700, unit: ns }
+    severity: caution
+
+  - text: "AC_Sprayer::update must use no more than 512 bytes of stack"
+    kind: budget
+    function: "AC_Sprayer::update"
+    signal: stack_depth
+    bound: { max: 512, unit: B }
+    severity: fail
+
+  - text: "ModeGuided::set_velaccel must run in under 10 microseconds"
+    kind: budget
+    function: "ModeGuided::set_velaccel"
+    signal: worst_path_time
+    bound: { max: 10000, unit: ns }
+    severity: fail
+
+  - text: "VisionIR::update must run in under 200 microseconds"
+    kind: budget
+    function: "VisionIR::update"
+    signal: worst_path_time
+    bound: { max: 200000, unit: ns }
+    severity: fail
+
+  - text: "VisionIR::update should use no more than 512 bytes of stack"
+    kind: budget
+    function: "VisionIR::update"
+    signal: stack_depth
+    bound: { max: 512, unit: B }
+    severity: caution
+
+  - text: "VisionIR::update hot path time should not regress more than 10 %"
+    kind: regression
+    function: "VisionIR::update"
+    signal: hot_path_time
+    bound: { max_delta: "+10 %" }
+    severity: caution
+
+  - text: "ac_spraey update put a contract on 3000 ns on hotpath"
+    kind: budget
+    function: "AC_Sprayer::update"
+    signal: hot_path_time
+    bound: { max: 3000, unit: ns }
