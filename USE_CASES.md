@@ -63,6 +63,21 @@ GCC 15.3) unless noted. Lead with the outcome (see SELLING.md), show the number.
   each `bl` resolved to its libm symbol.
 - **Sells to:** Developer/perf. Renesas, ModalAI, eProsima.
 
+## 9. Size a NEW task against its declared budget (Case 4 — IR camera)
+- **Skill:** exec-trace + control-flow · **Case 4** (VisionIR thermal camera)
+- **What:** a new thermal-camera hotspot monitor (AMG8833 8×8 over I2C) added to
+  the scheduler: `SCHED_TASK(VisionIR::update, 10 Hz, 200 µs)`. The developer
+  **already declares a 200 µs WCET budget** in the code — that IS a contract.
+- **Number:** LOCI reads the whole `update → read_frame → process_frame → report`
+  path from the binary, derives the 64-px decode loop (trips 64 exact), confirms
+  the **compute fits 200 µs** — and flags the real hazard: a **blocking I2C read
+  inside a 10 Hz flight task**, a callee it cannot bound.
+- **Story:** the canonical embedded workflow — "I'm adding a sensor task, does it
+  fit its slot without starving the controllers?" LOCI answers from the binary.
+- **Sells to:** Developer (confidence), Eng Manager (fewer surprises), Safety.
+  Renesas, ModalAI, Bosch, any RTOS-task team.
+- **Patch:** `patches/vision-ir-camera.patch` · ELF: `artifacts/arducopter-case4-visionir.elf`
+
 ## Also available (capability, not yet demoed here)
 - **memory-report** — ROM/RAM footprint & region budgets from the ELF (for
   flash-constrained MCU teams).

@@ -1,9 +1,26 @@
 # LOCI @ ROSCon 2026 — Spraying Drone Demo
 
+> **Educational / university demo.** This is a teaching project, not field
+> firmware. The "bugs" are deliberate teaching devices; the lesson is that
+> engineers should track performance metrics (timing, stack, memory) from the
+> **compiled artifact** in CI, not by eyeballing source. Do not fly this code.
+
 Live demo for ROSCon Global 2026 (Toronto, Sep 22–24): an innocent-looking
 "improvement" to ArduPilot's crop-sprayer controller that compiles clean, looks
-fine in review, misbehaves in the field — and how LOCI catches it from the
-compiled firmware before it ever flies.
+fine in review — and how LOCI catches its cost from the compiled firmware.
+
+## Cases & runner
+
+| Case | Change | LOCI signal | Patch |
+|---|---|---|---|
+| 1 | median speed filter | stack 32 B → 4136 B | `patches/speed-smoothing-bug.patch` |
+| 2 | wind-drift compensation | timing +82 µs | `patches/drift-compensation-bug.patch` |
+| 3 | ROS velocity smoothing | timing 1.8→30 µs (off-track) | `patches/velocity-smoothing.patch` |
+| 4 | IR camera task | fit vs declared 200 µs budget | `patches/vision-ir-camera.patch` |
+
+Run it: `scripts/demo.sh clean` → `scripts/demo.sh case <n>` → `scripts/demo.sh build`
+(then measure with LOCI in the `ardupilot/` session). Prompts to reproduce each
+case live with Claude are in `PROMPTS.md`; use cases in `USE_CASES.md`.
 
 ## The story
 
