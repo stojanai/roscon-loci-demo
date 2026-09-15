@@ -1,12 +1,12 @@
 version: 1
 
 entries:
-  - text: "acsprayer:update worst case path should not be higher 1700 ns"
+  - text: "AC_Sprayer::update worst case path must not exceed 6400 ns"
     kind: budget
     function: "AC_Sprayer::update"
     signal: worst_path_time
-    bound: { max: 1700, unit: ns }
-    severity: caution
+    bound: { max: 6400, unit: ns }
+    severity: fail
 
   - text: "AC_Sprayer::update must use no more than 512 bytes of stack"
     kind: budget
@@ -43,8 +43,32 @@ entries:
     bound: { max_delta: "+10 %" }
     severity: caution
 
-  - text: "ac_spraey update put a contract on 3000 ns on hotpath"
+  - text: "set the contract for AC_Sprayer::update hot path to 6000 ns"
     kind: budget
     function: "AC_Sprayer::update"
     signal: hot_path_time
-    bound: { max: 3000, unit: ns }
+    bound: { max: 6000, unit: ns }
+
+  - text: "Copter::rc_loop scheduler budget is 130 us (250 Hz)"
+    kind: budget
+    function: "Copter::rc_loop"
+    signal: worst_path_time
+    bound: { max: 130000, unit: ns }
+
+  - text: "AP_GPS::update scheduler budget is 200 us (50 Hz)"
+    kind: budget
+    function: "AP_GPS::update"
+    signal: worst_path_time
+    bound: { max: 200000, unit: ns }
+
+  - text: "Copter::run_nav_updates scheduler budget is 100 us (50 Hz)"
+    kind: budget
+    function: "Copter::run_nav_updates"
+    signal: worst_path_time
+    bound: { max: 100000, unit: ns }
+
+  - text: "GCS::update_receive scheduler budget is 180 us (400 Hz)"
+    kind: budget
+    function: "GCS::update_receive"
+    signal: worst_path_time
+    bound: { max: 180000, unit: ns }

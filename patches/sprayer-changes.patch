@@ -1,0 +1,181 @@
+diff --git a/libraries/AC_Sprayer/AC_Sprayer.cpp b/libraries/AC_Sprayer/AC_Sprayer.cpp
+index 5b903fa..fdaab39 100644
+--- a/libraries/AC_Sprayer/AC_Sprayer.cpp
++++ b/libraries/AC_Sprayer/AC_Sprayer.cpp
+@@ -6,6 +6,7 @@
+ #include <AP_AHRS/AP_AHRS.h>
+ #include <AP_HAL/AP_HAL.h>
+ #include <AP_Math/AP_Math.h>
++#include <Filter/ModeFilter.h>
+ #include <SRV_Channel/SRV_Channel.h>
+ 
+ extern const AP_HAL::HAL& hal;
+@@ -52,9 +53,43 @@ const AP_Param::GroupInfo AC_Sprayer::var_info[] = {
+     // @User: Standard
+     AP_GROUPINFO("PUMP_MIN",   4, AC_Sprayer, _pump_min_pct, AC_SPRAYER_DEFAULT_PUMP_MIN),
+ 
++    // @Param: DRIFT_EN
++    // @DisplayName: Wind drift compensation enable
++    // @Description: Allows you to enable (1) or disable (0) wind-drift compensation of the pump rate
++    // @Values: 0:Disabled,1:Enabled
++    // @User: Standard
++    AP_GROUPINFO("DRIFT_EN",   5, AC_Sprayer, _drift_enable, 0),
++
++    // @Param: BOOM_HGT
++    // @DisplayName: Spray release height
++    // @Description: Height of the spray release point above the crop canopy, used by the drift model
++    // @Units: m
++    // @Range: 0.5 10
++    // @User: Standard
++    AP_GROUPINFO("BOOM_HGT",   6, AC_Sprayer, _boom_height, AC_SPRAYER_DEFAULT_BOOM_HGT),
++
++    // @Param: DROP_VMD
++    // @DisplayName: Droplet volume median diameter
++    // @Description: Volume median diameter of the nozzle's droplet spectrum in microns
++    // @Range: 50 1000
++    // @User: Standard
++    AP_GROUPINFO("DROP_VMD",   7, AC_Sprayer, _drop_vmd, AC_SPRAYER_DEFAULT_DROP_VMD),
++
++    // @Param: SWATH_W
++    // @DisplayName: Swath half-width
++    // @Description: Effective half-width of the spray swath; droplets predicted to drift beyond this are treated as off-target
++    // @Units: m
++    // @Range: 0.5 10
++    // @User: Standard
++    AP_GROUPINFO("SWATH_W",    8, AC_Sprayer, _swath_halfwidth, AC_SPRAYER_DEFAULT_SWATH_W),
++
+     AP_GROUPEND
+ };
+ 
++// droplet-size bins: diameter as a multiple of VMD, and the volume fraction each bin carries
++static const float drift_bin_dia_factor[AC_SPRAYER_DRIFT_NUM_BINS] = { 0.5f, 0.75f, 1.0f, 1.5f, 2.0f };
++static const float drift_bin_weight[AC_SPRAYER_DRIFT_NUM_BINS]     = { 0.10f, 0.20f, 0.40f, 0.20f, 0.10f };
++
+ AC_Sprayer::AC_Sprayer()
+ {
+     if (_singleton) {
+@@ -104,6 +139,32 @@ void AC_Sprayer::run(const bool activate)
+     }
+ }
+ 
++// recompute the per-bin drift table; runs only when DROP_VMD or BOOM_HGT changed
++void AC_Sprayer::update_drift_constants()
++{
++    const float vmd = _drop_vmd;
++    const float boom = MAX(_boom_height, 0.0f);
++    if (is_equal(vmd, _drift_last_vmd) && is_equal(boom, _drift_last_boom)) {
++        return;
++    }
++    _drift_last_vmd = vmd;
++    _drift_last_boom = boom;
++
++    static const float rho_water = 1000.0f;    // kg/m^3
++    static const float rho_air = 1.225f;       // kg/m^3
++    static const float air_viscosity = 1.8e-5f; // Pa*s
++    static const float drag_cd = 0.6f;         // drag coefficient, large-droplet regime
++
++    for (uint8_t i = 0; i < AC_SPRAYER_DRIFT_NUM_BINS; i++) {
++        const float dia = vmd * 1.0e-6f * drift_bin_dia_factor[i];
++        // Stokes settling for small droplets, drag-limited for large; the slower governs
++        const float v_stokes = (rho_water * GRAVITY_MSS * dia * dia) / (18.0f * air_viscosity);
++        const float v_newton = sqrtf((4.0f * rho_water * GRAVITY_MSS * dia) / (3.0f * rho_air * drag_cd));
++        const float v_term = MAX(MIN(v_stokes, v_newton), 0.05f);
++        _drift_seconds[i] = boom / v_term;
++    }
++}
++
+ void AC_Sprayer::stop_spraying()
+ {
+     SRV_Channels::set_output_limit(SRV_Channel::k_sprayer_pump, SRV_Channel::Limit::MIN);
+@@ -136,6 +197,27 @@ void AC_Sprayer::update()
+ 
+     float ground_speed = velocity.xy().length() * 100.0;
+ 
++    // median-filter the ground speed over the last 5 samples so pump
++    // output tracks a smoothed speed rather than raw AHRS noise
++    constexpr uint8_t SPEED_FILT_SIZE = 5;   // odd, so the median is a real sample
++    static float speed_window[SPEED_FILT_SIZE];
++    static uint8_t speed_window_idx;
++    speed_window[speed_window_idx] = ground_speed;
++    speed_window_idx = (speed_window_idx + 1) % SPEED_FILT_SIZE;
++
++    float sorted[SPEED_FILT_SIZE];
++    memcpy(sorted, speed_window, sizeof(sorted));
++    for (uint8_t i = 1; i < SPEED_FILT_SIZE; i++) {
++        const float key = sorted[i];
++        int8_t j = i - 1;
++        while (j >= 0 && sorted[j] > key) {
++            sorted[j + 1] = sorted[j];
++            j--;
++        }
++        sorted[j + 1] = key;
++    }
++    ground_speed = sorted[SPEED_FILT_SIZE / 2];
++
+     // get the current time
+     const uint32_t now = AP_HAL::millis();
+ 
+@@ -184,6 +266,22 @@ void AC_Sprayer::update()
+     // if spraying or testing update the pump servo position
+     if (should_be_spraying) {
+         float pos = ground_speed * _pump_pct_1ms;
++
++        // trim the pump rate so the on-target dose holds in a crosswind
++        if (_drift_enable != 0 && ground_speed > 10.0f) {
++            update_drift_constants();
++            const Vector2f track_unit = velocity.xy().normalized();
++            const Vector2f wind = AP::ahrs().wind_estimate().xy();
++            const float crosswind = fabsf(track_unit % wind); // m/s perpendicular to track
++            float on_target = 0.0f;
++            for (uint8_t i = 0; i < AC_SPRAYER_DRIFT_NUM_BINS; i++) {
++                if (crosswind * _drift_seconds[i] < _swath_halfwidth) {
++                    on_target += drift_bin_weight[i];
++                }
++            }
++            pos /= MAX(on_target, AC_SPRAYER_DRIFT_TRIM_MIN);
++        }
++
+         pos = MAX(pos, 100 *_pump_min_pct); // ensure min pump speed
+         pos = MIN(pos,10000); // clamp to range
+         SRV_Channels::move_servo(SRV_Channel::k_sprayer_pump, pos, 0, 10000);
+diff --git a/libraries/AC_Sprayer/AC_Sprayer.h b/libraries/AC_Sprayer/AC_Sprayer.h
+index e4f0ba4..95846a1 100644
+--- a/libraries/AC_Sprayer/AC_Sprayer.h
++++ b/libraries/AC_Sprayer/AC_Sprayer.h
+@@ -28,6 +28,11 @@
+ #define AC_SPRAYER_DEFAULT_SPEED_MIN        100     ///< we must be travelling at least 1m/s to begin spraying
+ #define AC_SPRAYER_DEFAULT_TURN_ON_DELAY    100     ///< delay between when we reach the minimum speed and we begin spraying.  This reduces the likelihood of constantly turning on/off the pump
+ #define AC_SPRAYER_DEFAULT_SHUT_OFF_DELAY   1000    ///< shut-off delay in milli seconds.  This reduces the likelihood of constantly turning on/off the pump
++#define AC_SPRAYER_DEFAULT_BOOM_HGT         2.0f    ///< default spray release height above the crop canopy in metres
++#define AC_SPRAYER_DEFAULT_DROP_VMD         250.0f  ///< default droplet volume median diameter in microns
++#define AC_SPRAYER_DEFAULT_SWATH_W          2.0f    ///< default effective swath half-width in metres
++#define AC_SPRAYER_DRIFT_TRIM_MIN           0.34f   ///< floor on the on-target fraction, capping the drift trim at ~3x pump rate
++#define AC_SPRAYER_DRIFT_NUM_BINS           5       ///< droplet-size bins in the drift model
+ 
+ /// @class  AC_Sprayer
+ /// @brief  Object managing a crop sprayer comprised of a spinner and a pump both controlled by pwm
+@@ -71,6 +76,10 @@ private:
+     AP_Int8         _pump_min_pct;          ///< minimum pump rate (expressed as a percentage from 0 to 100)
+     AP_Int16        _spinner_pwm;           ///< pwm rate of spinner
+     AP_Float        _speed_min;             ///< minimum speed in cm/s above which the sprayer will be started
++    AP_Int8         _drift_enable;          ///< wind-drift compensation enable/disable
++    AP_Float        _boom_height;           ///< spray release height above the crop canopy in m
++    AP_Float        _drop_vmd;              ///< droplet volume median diameter in microns
++    AP_Float        _swath_halfwidth;       ///< effective swath half-width in m
+ 
+     /// flag bitmask
+     struct sprayer_flags_type {
+@@ -83,7 +92,13 @@ private:
+     uint32_t        _speed_over_min_time;   ///< time at which we reached speed minimum
+     uint32_t        _speed_under_min_time;  ///< time at which we fell below speed minimum
+ 
++    // wind-drift compensation model
++    float           _drift_seconds[AC_SPRAYER_DRIFT_NUM_BINS]; ///< per-bin fall time from boom to canopy in seconds
++    float           _drift_last_vmd;        ///< VMD (microns) the drift table was computed for
++    float           _drift_last_boom;       ///< boom height (m) the drift table was computed for
++
+     void stop_spraying();
++    void update_drift_constants();
+ };
+ 
+ namespace AP {

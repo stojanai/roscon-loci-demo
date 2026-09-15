@@ -13,3 +13,6 @@ mav.tlog.raw
 
 # OS cruft
 .DS_Store
+
+report-*-darwin.md
+*.paths.json
