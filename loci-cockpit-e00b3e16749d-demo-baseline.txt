@@ -1,0 +1,112 @@
+execution intelligence                                                                                        ○ idle 51m
+roscon-loci-demo  ·  demo-baseline  ·  armv7e-m
+4 commits tracked
+13 catches · 25 checks · 14 fns   proj 1/10
+
+CATCHES AND CHECKS — Chronological log of what LOCI did. Includes checks, analyses, agent assessments, contract updates,
+etc.
+
+09-15 22:32  stack-depth      🔶 CAUTION     worst-case 64 B is a >= floor: AC_Sprayer::update callees           705cbfd
+                                             unresolved in this binary (assumed 64 B), so true depth is                 
+                                             higher; the 512 B bound still has wide headroom                            
+09-15 22:30  exec-trace       🔶 CAUTION     AC_Sprayer::update (worst+hot) and GCS::update_receive (worst)      705cbfd
+                                             are >= floors: irreducible cycles / unknown loop trip count, true          
+                                             worst case can exceed them; all six contract bounds otherwise              
+                                             pass with                                                                  
+09-15 15:40  exec-trace       🔶 CAUTION     AC_Sprayer::update 6,522ns against ≤ 1,700ns                        a6a5a43
+09-15 15:39  exec-trace       🔶 CAUTION     AC_Sprayer::update 6,462ns against ≤ 1,700ns                        a6a5a43
+09-15 15:17  stack-depth      🔶 CAUTION     worst-case ≥64 B for both, lower bound: callee bodies not           a6a5a43
+                                             disassembled (unknown_callees), and VisionIR::update is absent             
+                                             from the binary so its 64 B is a default substitution, not a               
+                                             measurement                                                                
+09-15 15:14  exec-trace       🔶 CAUTION     AC_Sprayer::update 2,598ns against ≤ 1,700ns · 4 entries awaiting   a6a5a43
+                                             judgment                                                                   
+09-14 21:42  exec-trace       🔶 CAUTION     AC_Sprayer::update worst path 5,603 ns against the 1,700 ns bound   03816e5
+                                             (330%); hot paths for AC_Sprayer and VisionIR are lower bounds             
+                                             (indirect calls) · 3 entries awaiting judgment                             
+09-14 21:40  stack-depth      INCOMPLETE     6 entries unjudged — no_measurement                                 03816e5
+09-14 21:39  stack-depth      ✅ PASS        AC_Sprayer::update 64B against ≤ 512B (+1 more)                     03816e5
+09-14 21:31  stack-depth      INCOMPLETE     6 entries unjudged — no_measurement                                 03816e5
+09-14 21:28  stack-depth      INCOMPLETE     6 entries unjudged — no_measurement                                 03816e5
+09-14 21:23  stack-depth      ✅ PASS        AC_Sprayer::update 64B against ≤ 512B (+1 more)                     03816e5
+09-14 21:23  stack-depth      ✅ PASS        AC_Sprayer::update 64B against ≤ 512B (+1 more)                     03816e5
+09-14 21:22  stack-depth      ✅ PASS        AC_Sprayer::update 64B against ≤ 512B (+1 more)                     03816e5
+09-14 21:13  stack-depth      🔶 CAUTION     both entry functions appear in unknown_callees with assumed 64 B    03816e5
+                                             — bodies not disassembled (debug-info sources absent, c++filt              
+                                             failed); the 64 B is a fallback substitution, not a measured               
+                                             depth                                                                      
+09-14 20:32  exec-trace       🔶 CAUTION     worst path against CURRENT source (not the stale demo ELF) is       03816e5
+                                             >=6,462 ns, 380% of the 1700 ns bound (entry 85d29e81fe5b) -- the          
+                                             5-element median-filter insertion sort (L1/L2) and the wind-drift          
+                                             crossw                                                                     
+09-14 16:18  exec-trace       ✅ PASS        ModeGuided::set_velaccel worst path 1,853 ns against the user's     03816e5
+                                             10 us bound (18.5%), clean upper bound; entry could not attach             
+                                             because demangling fails on this host, so the comparison is the            
+                                             agent's q                                                                  
+09-14 16:09  stack-depth      ✅ PASS        AC_Sprayer::update worst-case 168 B against the user's 512 B        03816e5
+                                             bound (32.8%), clean upper bound (no cycles, no indirect calls,            
+                                             no unknown callees); entry could not attach because demangling             
+                                             fails on thi                                                               
+09-14 16:08  stack-depth      🔶 CAUTION     both 64 B figures are the unknown-callee placeholder, not           03816e5
+                                             measured frames — neither function body was resolved (demangler            
+                                             broken; VisionIR::update absent from this ELF); the PASS rows are          
+                                             unsound                                                                    
+09-14 16:03  exec-trace       🔶 CAUTION     worst path of AC_Sprayer::update >=2,598 ns floor already exceeds   03816e5
+                                             the contract's 1700 ns bound; entry could not attach because               
+                                             symbol demangling (c++filt) fails on this host, so the comparison          
+                                             is the                                                                     
+09-14 15:22  loci-post-edit   INCOMPLETE     vision_ir member in Copter shifted later member offsets; 4          03816e5
+                                             functions re-encoded across 3 of 296 reached TUs, no behavioural           
+                                             change intended and no bound covers them                                   
+09-14 15:21  loci-post-edit   INCOMPLETE     scheduler wiring for VisionIR: Copter ctor/dtor and the             03816e5
+                                             VisionIR::update functor wrapper changed as intended; no contract          
+                                             bound covers them and no timing was requested                              
+09-14 15:19  loci-post-edit   INCOMPLETE     new header vision_ir.h reaches 0 translation units — nothing        03816e5
+                                             includes it yet; measurement deferred until it is wired into               
+                                             Copter.h                                                                   
+09-11 09:45  loci-preflight   🔶 CAUTION     wind-drift calc already exists in update(); worst path is only a    03816e5
+                                             lower bound (>=6,462 ns) - median-filter shift loop                        
+                                             (AC_Sprayer.cpp:213-216) and drift-bin loop (277-281) have                 
+                                             underivable trip counts                                                    
+09-10 17:36  loci-preflight   🔶 CAUTION     planned 32-step expf/cosf/logf lookahead risks the contract bound   03816e5
+                                             'ModeGuided::set_velaccel must run in under 10 microseconds':              
+                                             worst path already 5,233 ns callee-excluded, ~4.8 us headroom              
+
+CONTRACT ENVELOPE — cost vs budget
+
+  ENTRY                              │ COST        │ BUDGET      │ STATUS      │ AGENT ASSESSMENT │ NOTE                
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance (worst) ·              │ 2,489 ✓ 67% │ ≤ 3,700ns   │ ✅ PASS     │ As reported      │                     
+  AC_Sprayer::update                 │             │             │             │                  │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance · AP_GPS::update       │ 1,402 ✓ 67% │ ≤ 2,100ns   │ ✅ PASS     │ As reported      │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance (hot) ·                │   312 ✓ 66% │ ≤ 470ns     │ ✅ PASS     │ As reported      │                     
+  AC_Sprayer::update                 │             │             │             │                  │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance ·                      │ 1,853 ✓ 66% │ ≤ 2,800ns   │ ✅ PASS     │ As reported      │                     
+  ModeGuided::set_velaccel           │             │             │             │                  │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance ·                      │ 78.73 ✓ 66% │ ≤ 120ns     │ ✅ PASS     │ As reported      │                     
+  Copter::run_nav_updates            │             │             │             │                  │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance · GCS::update_receive  │   783 ✓ 65% │ ≤ 1,200ns   │ ✅ PASS     │ As reported      │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Stack · AC_Sprayer::update         │    64 ✓ 12% │ ≤ 512B      │ ✅ PASS     │ As reported      │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Stack · VisionIR::update           │    64 ✓ 12% │ ≤ 512B      │ ✅ PASS     │ As reported      │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance (worst) ·              │   774 ✓ <1% │ ≤ 200,000ns │ ✅ PASS     │ As reported      │                     
+  VisionIR::update                   │             │             │             │                  │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance (hot) ·                │     —       │ +10 %       │ —           │ —                │ —                   
+  VisionIR::update                   │             │             │             │                  │                     
+  ───────────────────────────────────┼─────────────┼─────────────┼─────────────┼──────────────────┼─────────────────────
+  Performance · Copter::rc_loop      │     —       │ ≤ 130,000ns │ —           │ —                │ —                   
+  6 costed from an earlier run (oldest 2026-09-14 19:42) — the newer measurements of those functions cannot answer their
+  dimension                                                                                                             
+
+  basis: .loci/contract.yaml, edited 2026-09-15 22:52 · cost from local measurements                                    
+
+2 plans redirected · 14 fns · 25 checks
+

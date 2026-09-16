@@ -1,11 +1,11 @@
 version: 1
 
 entries:
-  - text: "AC_Sprayer::update worst case path must not exceed 6400 ns"
+  - text: "AC_Sprayer::update worst case path must not exceed 3700 ns"
     kind: budget
     function: "AC_Sprayer::update"
     signal: worst_path_time
-    bound: { max: 6400, unit: ns }
+    bound: { max: 5700, unit: ns }
     severity: fail
 
   - text: "AC_Sprayer::update must use no more than 512 bytes of stack"
@@ -15,11 +15,11 @@ entries:
     bound: { max: 512, unit: B }
     severity: fail
 
-  - text: "ModeGuided::set_velaccel must run in under 10 microseconds"
+  - text: "ModeGuided::set_velaccel must run in under 2800 ns"
     kind: budget
     function: "ModeGuided::set_velaccel"
     signal: worst_path_time
-    bound: { max: 10000, unit: ns }
+    bound: { max: 2800, unit: ns }
     severity: fail
 
   - text: "VisionIR::update must run in under 200 microseconds"
@@ -29,46 +29,72 @@ entries:
     bound: { max: 200000, unit: ns }
     severity: fail
 
-  - text: "VisionIR::update should use no more than 512 bytes of stack"
+  - text: "VisionIR::update must use no more than 512 bytes of stack"
     kind: budget
     function: "VisionIR::update"
     signal: stack_depth
     bound: { max: 512, unit: B }
-    severity: caution
+    severity: fail
 
-  - text: "VisionIR::update hot path time should not regress more than 10 %"
+  - text: "VisionIR::update hot path time must not regress more than 10 %"
     kind: regression
     function: "VisionIR::update"
     signal: hot_path_time
     bound: { max_delta: "+10 %" }
-    severity: caution
+    severity: fail
 
-  - text: "set the contract for AC_Sprayer::update hot path to 6000 ns"
+  - text: "AC_Sprayer::update hot path must not exceed 470 ns"
     kind: budget
     function: "AC_Sprayer::update"
     signal: hot_path_time
-    bound: { max: 6000, unit: ns }
+    bound: { max: 970, unit: ns }
+    severity: fail
 
-  - text: "Copter::rc_loop scheduler budget is 130 us (250 Hz)"
+  - text: "Copter::rc_loop must not exceed 130 us (250 Hz scheduler budget)"
     kind: budget
     function: "Copter::rc_loop"
     signal: worst_path_time
     bound: { max: 130000, unit: ns }
+    severity: fail
 
-  - text: "AP_GPS::update scheduler budget is 200 us (50 Hz)"
+  - text: "AP_GPS::update must not exceed 2100 ns (baseline +50%)"
     kind: budget
     function: "AP_GPS::update"
     signal: worst_path_time
-    bound: { max: 200000, unit: ns }
+    bound: { max: 2100, unit: ns }
+    severity: fail
 
-  - text: "Copter::run_nav_updates scheduler budget is 100 us (50 Hz)"
+  - text: "Copter::run_nav_updates must not exceed 120 ns (baseline +50%)"
     kind: budget
     function: "Copter::run_nav_updates"
     signal: worst_path_time
-    bound: { max: 100000, unit: ns }
+    bound: { max: 120, unit: ns }
+    severity: fail
 
-  - text: "GCS::update_receive scheduler budget is 180 us (400 Hz)"
+  - text: "GCS::update_receive must not exceed 1200 ns (baseline +50%)"
     kind: budget
     function: "GCS::update_receive"
     signal: worst_path_time
-    bound: { max: 180000, unit: ns }
+    bound: { max: 1200, unit: ns }
+    severity: fail
+
+  - text: "AC_Sprayer::throughput_fraction must not exceed 208 ns (Python prototype baseline)"
+    kind: budget
+    function: "AC_Sprayer::throughput_fraction"
+    signal: worst_path_time
+    bound: { max: 208, unit: ns }
+    severity: fail
+
+  - text: "AC_Sprayer::applied_rate_lha must not exceed 317 ns (Python prototype baseline)"
+    kind: budget
+    function: "AC_Sprayer::applied_rate_lha"
+    signal: worst_path_time
+    bound: { max: 317, unit: ns }
+    severity: fail
+
+  - text: "AC_Sprayer::ground_height_agl must not exceed 106 ns (Python prototype baseline)"
+    kind: budget
+    function: "AC_Sprayer::ground_height_agl"
+    signal: worst_path_time
+    bound: { max: 106, unit: ns }
+    severity: fail

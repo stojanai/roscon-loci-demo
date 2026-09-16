@@ -1,5 +1,25 @@
 # LOCI @ ROSCon 2026 — Spraying Drone Demo
 
+## Quick start
+
+```bash
+# 1. Build the demo firmware (CubeOrange ELF that LOCI analyzes)
+./scripts/demo.sh build
+
+# 2. Restore a clean baseline tree
+./scripts/demo.sh clean
+
+# 3. Launch SITL and auto-load the spray mission
+./scripts/demo.sh sitl
+```
+
+`build` compiles the CubeOrange ELF to `artifacts/arducopter-current.elf` (what
+LOCI measures). `clean` reverts `ardupilot/` to the baseline tree. `sitl` boots
+SITL at the mission home and flies hands-free (GUIDED → arm → takeoff → AUTO →
+sprayer on); the first `sitl` run compiles the SITL binary (~5 min). If
+`ardupilot/`, `toolchain/`, or `venv/` are missing, do **Setup (fresh clone)**
+below first.
+
 > **Educational / university demo.** This is a teaching project, not field
 > firmware. The "bugs" are deliberate teaching devices; the lesson is that
 > engineers should track performance metrics (timing, stack, memory) from the
@@ -209,3 +229,9 @@ a second. Bugged build: pump stays near minimum for minutes regardless of speed
 (median of 1024 samples @ 3 Hz is still dominated by on-ground zeros).
 `long DO_SPRAYER 0` turns spraying off.
 # roscon-loci-demo
+mode guided                                                                                                                
+arm throttle                                                                                                               
+takeoff 15                                                                                             
+
+ mode auto  
+  "autofly: DO_SPRAYER=1 sent — sprayer force-enabled"

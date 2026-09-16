@@ -44,6 +44,8 @@ class SprayOverlayModule(mp_module.MPModule):
             ('hud_size', float, 0.6),    # label text size
             ('swath_m', float, 5.0),     # CONSTANT physical nozzle swath (m) for dose
             ('pump_lps', float, 0.075),  # full-pump flow (l/s); mirrors SITL pump_max_rate
+            ('rngfnd_min', float, 0.2),  # ignore rangefinder below this (m); 0 = unhealthy
+            ('rngfnd_max', float, 50.0), # rangefinder max range (m); mirrors RNGFND1_MAX_CM
         ])
         self.add_command('spray', self.cmd_spray, 'sprayed-area overlay',
                          ['status', 'clear', 'set (SPRAYSETTING)'])
@@ -53,6 +55,8 @@ class SprayOverlayModule(mp_module.MPModule):
         self.count = 0
         self.requested = 0            # last time we asked for the servo stream
         self.groundspeed = 0.0        # m/s, from GLOBAL_POSITION_INT vx/vy
+        self.height = 0.0             # m above home (GLOBAL_POSITION_INT relative_alt)
+        self.agl = None               # m above ground, from the downward RANGEFINDER
 
     # ---- throughput ------------------------------------------------------
     def throughput_fraction(self):
@@ -80,19 +84,40 @@ class SprayOverlayModule(mp_module.MPModule):
         flow_lps = self.throughput_fraction() * self.spray_settings.pump_lps
         return (flow_lps / (w * gs)) * 1.0e4
 
+    def rngfnd_valid(self):
+        '''True when the downward rangefinder has a healthy in-range reading.
+        A 0 / below-min distance means the sensor is unhealthy (or not yet
+        initialised after a reboot) -> not valid, fall back to altitude.'''
+        return (self.agl is not None
+                and self.spray_settings.rngfnd_min <= self.agl
+                <= self.spray_settings.rngfnd_max)
+
+    def ground_height(self):
+        '''best "height above ground" (m): downward rangefinder when it has a
+        valid reading, else altitude above home (== AGL over flat ground).'''
+        return self.agl if self.rngfnd_valid() else self.height
+
     # ---- MAVLink ---------------------------------------------------------
-    def request_servo_stream(self):
-        '''Ask the FC to stream SERVO_OUTPUT_RAW so we can read the pump.'''
+    def request_stream(self, msg_id):
+        '''Ask the FC to stream a given message ID at rate_hz.'''
         try:
             import pymavlink.mavutil as mavutil
             interval_us = int(1e6 / max(1.0, self.spray_settings.rate_hz))
             self.master.mav.command_long_send(
                 self.settings.target_system, self.settings.target_component,
                 mavutil.mavlink.MAV_CMD_SET_MESSAGE_INTERVAL, 0,
-                mavutil.mavlink.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW,
-                interval_us, 0, 0, 0, 0, 0)
+                msg_id, interval_us, 0, 0, 0, 0, 0)
         except Exception:
             pass
+
+    def request_servo_stream(self):
+        '''Stream SERVO_OUTPUT_RAW (pump) and RANGEFINDER (height AGL).'''
+        try:
+            import pymavlink.mavutil as mavutil
+        except Exception:
+            return
+        self.request_stream(mavutil.mavlink.MAVLINK_MSG_ID_SERVO_OUTPUT_RAW)
+        self.request_stream(mavutil.mavlink.MAVLINK_MSG_ID_RANGEFINDER)
 
     def idle_task(self):
         # (Re)request the pump stream until it actually arrives.
@@ -107,8 +132,11 @@ class SprayOverlayModule(mp_module.MPModule):
         if t == 'SERVO_OUTPUT_RAW':
             self.pump_pwm = m.servo10_raw
             self.have_pump = True
+        elif t == 'RANGEFINDER':
+            self.agl = m.distance            # m above ground, downward sensor
         elif t == 'GLOBAL_POSITION_INT':
             self.groundspeed = ((m.vx * m.vx + m.vy * m.vy) ** 0.5) / 100.0
+            self.height = m.relative_alt * 1e-3   # mm -> m above home
             lat, lon = m.lat * 1e-7, m.lon * 1e-7
             self.maybe_mark(lat, lon)
             self.update_hud(lat, lon)
@@ -145,7 +173,8 @@ class SprayOverlayModule(mp_module.MPModule):
         slipmap = getattr(self.mpstate, 'map', None)
         if slipmap is None:
             return
-        text = "%.1f m/s   %.1f L/ha" % (self.groundspeed, self.liters_per_ha())
+        text = "%.1f m/s   %.1f m AGL   %.1f L/ha" % (
+            self.groundspeed, self.ground_height(), self.liters_per_ha())
         # offset the label ~6 m NE of the copter so it doesn't sit under the icon
         plat = lat + 6.0 / 111320.0
         try:
@@ -166,10 +195,13 @@ class SprayOverlayModule(mp_module.MPModule):
     # ---- commands --------------------------------------------------------
     def cmd_spray(self, args):
         if not args or args[0] == 'status':
-            print("spray: throughput %.0f%% (pump pwm %u), %.1f m/s, %.1f L/ha, "
+            src = "rngfnd" if self.rngfnd_valid() else "rel_alt"
+            print("spray: throughput %.0f%% (pump pwm %u), %.1f m/s, "
+                  "%.1f m AGL (%s), %.1f L/ha, "
                   "width now %.1f m, maxwidth %.1f m, marks %u"
                   % (self.throughput_fraction() * 100.0, self.pump_pwm,
-                     self.groundspeed, self.liters_per_ha(),
+                     self.groundspeed, self.ground_height(), src,
+                     self.liters_per_ha(),
                      self.throughput_fraction() * self.spray_settings.maxwidth,
                      self.spray_settings.maxwidth, self.count))
         elif args[0] == 'clear':

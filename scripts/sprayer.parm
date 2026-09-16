@@ -12,6 +12,13 @@ SERVO11_FUNCTION 23
 SIM_SPR_ENABLE 1
 SIM_SPR_PUMP 10
 SIM_SPR_SPIN 11
+# downward rangefinder (SITL) -> true height above ground (AGL) for the spray HUD.
+# TYPE 100 = SITL simulated sensor; ORIENT 25 = pointing straight down.
+RNGFND1_TYPE 100
+RNGFND1_ORIENT 25
+RNGFND1_MIN_CM 10
+RNGFND1_MAX_CM 5000
+RNGFND1_GNDCLEAR 15
 # demo comfort: no battery-percentage warnings/failsafe during a long talk
 BATT_CAPACITY 0
 BATT_LOW_VOLT 0
