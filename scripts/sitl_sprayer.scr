@@ -13,7 +13,7 @@
 # The last line force-enables the sprayer (MAV_CMD_DO_SPRAYER = 216, param1=1)
 # so it runs regardless of the mission's own DO_SPRAYER item. The pump only
 # physically outputs once groundspeed passes SPRAY_SPEED_MIN, which the mission's
-# DO_CHANGE_SPEED (5 m/s) provides.
+# DO_CHANGE_SPEED (2.5 m/s) provides.
 mode guided
 arm throttle
 takeoff 15

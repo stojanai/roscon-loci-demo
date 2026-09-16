@@ -3,8 +3,8 @@ SPRAY_ENABLE 1
 SPRAY_PUMP_RATE 10
 SPRAY_SPEED_MIN 100
 SPRAY_PUMP_MIN 0
-# default AUTO cruise speed (cm/s): 500 = 5 m/s. Caps mission DO_CHANGE_SPEED.
-WPNAV_SPEED 500
+# default AUTO cruise speed (cm/s): 250 = 2.5 m/s. Caps mission DO_CHANGE_SPEED.
+WPNAV_SPEED 250
 # pump on SERVO10 (function 22), spinner on SERVO11 (function 23)
 SERVO10_FUNCTION 22
 SERVO11_FUNCTION 23
