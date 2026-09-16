@@ -340,7 +340,67 @@ pos *= <span class="n">1</span> + drift*<span class="n">0.05</span>;</pre>
     </div>
   </section>
 
-  <!-- 8 · CONTRAST -->
+  <!-- 8 · CASE 3 (ROS velocity) -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">Case 3 · the ROS ↔ flight seam</div>
+      <h2>ROS commands the path. The drone <span class="coral">drifts off it.</span></h2>
+      <p class="lead">Motivation: ROS <span class="mono">/ap/cmd_vel</span> setpoints are
+      jittery — smooth them for a gentler ride. The filter lands in
+      <span class="mono">ModeGuided::set_velaccel</span>, the one function BOTH ROS and
+      MAVLink velocity flow through.</p>
+      <div class="grid2" style="margin-top:22px;align-items:center">
+        <div class="panel">
+          <table>
+            <thead><tr><th>set_velaccel</th><th class="num">Throughput</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="dim">baseline</td><td class="num">1.8 µs</td><td></td></tr>
+              <tr><td>case 3 (64-tap smoothing)</td><td class="num coral">30 µs</td><td><span class="tag fail">~16×</span></td></tr>
+            </tbody>
+          </table>
+          <p class="footnote">LOCI derived the 64-iteration loop trip count from the binary.</p>
+        </div>
+        <div>
+          <p class="lead" style="margin-top:0">Your ROS graph looks healthy — but the
+          velocity handler between ROS and the motors got <b class="coral">16× slower</b>,
+          so the drone lags every turn and rounds the corner wide.</p>
+          <p class="kicker">The regression sits on the ROS↔flight seam, where topic-level tooling is blind.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 9 · CASE 4 (IR camera) -->
+  <section class="slide">
+    <div class="wrap">
+      <div class="eyebrow">Case 4 · sizing a new task</div>
+      <h2>A new IR-camera task. Does it fit its <span class="amber">budget?</span></h2>
+      <p class="lead">Motivation: add thermal-camera hotspot monitoring (AMG8833 8×8 over
+      I2C) at 10 Hz. ArduPilot developers already declare a per-task budget in the
+      scheduler — <span class="mono">SCHED_TASK(VisionIR::update, 10 Hz, 200 µs)</span>.
+      That declared budget IS a contract.</p>
+      <div class="grid2" style="margin-top:22px;align-items:center">
+        <div class="panel">
+          <table>
+            <thead><tr><th>VisionIR::update path</th><th class="num">Verdict</th></tr></thead>
+            <tbody>
+              <tr><td>compute (update→read→process→report)</td><td class="num teal">fits 200 µs</td></tr>
+              <tr><td class="amber">read_frame: blocking I2C read (128 B)</td><td class="num coral">unbounded</td></tr>
+            </tbody>
+          </table>
+          <p class="footnote">LOCI read the 64-px decode loop (trips 64 exact) and flags the I2C transfer as a callee it cannot bound.</p>
+        </div>
+        <div>
+          <p class="lead" style="margin-top:0">The budget you <b>wrote</b> is the contract.
+          LOCI checks it from the binary: the compute fits — but it surfaces the real hazard,
+          a <b class="coral">blocking I2C read inside a 10 Hz flight task</b>.</p>
+          <p class="kicker">Use case: size a new sensor task against its declared budget — before it steals time from the controllers.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 10 · CONTRAST -->
   <section class="slide">
     <div class="wrap">
       <div class="eyebrow">Precision — and honesty</div>
@@ -384,7 +444,7 @@ pos *= <span class="n">1</span> + drift*<span class="n">0.05</span>;</pre>
 
 <div class="dots" id="dots"></div>
 <div class="nav">
-  <span class="count" id="count">01 / 09</span>
+  <span class="count" id="count">01 / 11</span>
   <button id="prev" aria-label="Previous slide">‹</button>
   <button id="next" aria-label="Next slide">›</button>
 </div>
@@ -398,7 +458,8 @@ pos *= <span class="n">1</span> + drift*<span class="n">0.05</span>;</pre>
   const topic=document.getElementById('topic');
   const topics=['ROSCON 2026 · LOCI','SPRAYER · SCHEDULER STACK','CASE 1 · MEDIAN FILTER',
     'CASE 1 · STACK 4136 B','CASE 2 · DRIFT COMP','CASE 2 · TIMING 82 µs',
-    'CASE 2 · HOT PATH','PRECISION + HONESTY','BELOW THE TOPIC LAYER'];
+    'CASE 2 · HOT PATH','CASE 3 · ROS SEAM','CASE 4 · SIZE THE TASK',
+    'PRECISION + HONESTY','BELOW THE TOPIC LAYER'];
   let i=0;
   slides.forEach((_,n)=>{const d=document.createElement('i');
     d.onclick=()=>go(n);dotsWrap.appendChild(d);});

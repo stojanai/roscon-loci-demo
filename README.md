@@ -1,9 +1,46 @@
 # LOCI @ ROSCon 2026 — Spraying Drone Demo
 
+## Quick start
+
+```bash
+# 1. Build the demo firmware (CubeOrange ELF that LOCI analyzes)
+./scripts/demo.sh build
+
+# 2. Restore a clean baseline tree
+./scripts/demo.sh clean
+
+# 3. Launch SITL and auto-load the spray mission
+./scripts/demo.sh sitl
+```
+
+`build` compiles the CubeOrange ELF to `artifacts/arducopter-current.elf` (what
+LOCI measures). `clean` reverts `ardupilot/` to the baseline tree. `sitl` boots
+SITL at the mission home and flies hands-free (GUIDED → arm → takeoff → AUTO →
+sprayer on); the first `sitl` run compiles the SITL binary (~5 min). If
+`ardupilot/`, `toolchain/`, or `venv/` are missing, do **Setup (fresh clone)**
+below first.
+
+> **Educational / university demo.** This is a teaching project, not field
+> firmware. The "bugs" are deliberate teaching devices; the lesson is that
+> engineers should track performance metrics (timing, stack, memory) from the
+> **compiled artifact** in CI, not by eyeballing source. Do not fly this code.
+
 Live demo for ROSCon Global 2026 (Toronto, Sep 22–24): an innocent-looking
 "improvement" to ArduPilot's crop-sprayer controller that compiles clean, looks
-fine in review, misbehaves in the field — and how LOCI catches it from the
-compiled firmware before it ever flies.
+fine in review — and how LOCI catches its cost from the compiled firmware.
+
+## Cases & runner
+
+| Case | Change | LOCI signal | Patch |
+|---|---|---|---|
+| 1 | median speed filter | stack 32 B → 4136 B | `patches/speed-smoothing-bug.patch` |
+| 2 | wind-drift compensation | timing +82 µs | `patches/drift-compensation-bug.patch` |
+| 3 | ROS velocity smoothing | timing 1.8→30 µs (off-track) | `patches/velocity-smoothing.patch` |
+| 4 | IR camera task | fit vs declared 200 µs budget | `patches/vision-ir-camera.patch` |
+
+Run it: `scripts/demo.sh clean` → `scripts/demo.sh case <n>` → `scripts/demo.sh build`
+(then measure with LOCI in the `ardupilot/` session). Prompts to reproduce each
+case live with Claude are in `PROMPTS.md`; use cases in `USE_CASES.md`.
 
 ## The story
 
@@ -152,10 +189,21 @@ project directory; the demo root is fine too but the ardupilot checkout is
 what gets analyzed) and:
 
 1. `/contract` — set stack/timing bounds on `AC_Sprayer::update`
+   (see [`CONTRACT.md`](CONTRACT.md) for the exact bounds, the `/contract`
+   wording, and the rationale)
 2. `scripts/build_fw.sh baseline` → ask for stack-depth / exec-trace on
    `build/CubeOrange/bin/arducopter` → bounds pass
 3. `scripts/build_fw.sh bugged` → re-run analysis → contract FAILS
    (timing + 4 KB stack jump)
+
+**Contract bounds** (`ardupilot/.loci/contract.yaml`, full detail in
+[`CONTRACT.md`](CONTRACT.md)):
+
+| Function | Signal | Bound | Bug that breaks it |
+|---|---|---|---|
+| `AC_Sprayer::update` | timing | ≤ 50 µs | Case 2 → ~106 µs |
+| `AC_Sprayer::update` | stack | ≤ 512 B | Case 1 → 4240 B |
+| `ModeGuided::set_velaccel` | timing | ≤ 10 µs | Case 3 → 30 µs |
 
 ## SITL visual (audience view)
 
@@ -175,3 +223,9 @@ a second. Bugged build: pump stays near minimum for minutes regardless of speed
 (median of 1024 samples @ 3 Hz is still dominated by on-ground zeros).
 `long DO_SPRAYER 0` turns spraying off.
 # roscon-loci-demo
+mode guided                                                                                                                
+arm throttle                                                                                                               
+takeoff 15                                                                                             
+
+ mode auto  
+  "autofly: DO_SPRAYER=1 sent — sprayer force-enabled"

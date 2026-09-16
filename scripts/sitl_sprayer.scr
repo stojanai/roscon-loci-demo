@@ -1,0 +1,22 @@
+# MAVProxy console script for the spray demo — MANUAL, hands-free flight.
+#
+# Run this yourself in the MAVProxy console AFTER the mission upload prints
+# "uploaded and VERIFIED" (or `wp list` shows 32 waypoints):
+#
+#     script scripts/sitl_sprayer.scr
+#
+# NOTE: a .scr runs these lines back-to-back with no waiting, so only run it
+# once the copter is armable (GPS lock, "pre-arm good"). For a fully automatic
+# start that waits for readiness on its own, run_sitl.sh already launches
+# scripts/autofly.py — this file is the manual equivalent for on-stage re-runs.
+#
+# The last line force-DISABLES the sprayer (MAV_CMD_DO_SPRAYER = 216, param1=0)
+# so the pump starts off; the mission then enables it per crop row (a DO_SPRAYER
+# 1/0 pair around each survey line) and the ferry legs / headland turns stay dry.
+# The pump only physically outputs while spraying a row above SPRAY_SPEED_MIN,
+# which the mission's DO_CHANGE_SPEED (2.5 m/s) provides.
+mode guided
+arm throttle
+takeoff 15
+mode auto
+long DO_SPRAYER 0 0 0 0 0 0 0

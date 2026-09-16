@@ -1,0 +1,32 @@
+diff --git a/ArduCopter/mode_guided.cpp b/ArduCopter/mode_guided.cpp
+index f7ce764..4b47503 100644
+--- a/ArduCopter/mode_guided.cpp
++++ b/ArduCopter/mode_guided.cpp
+@@ -561,10 +561,26 @@ void ModeGuided::set_velaccel(const Vector3f& velocity, const Vector3f& accelera
+     // set yaw state
+     set_yaw_state(use_yaw, yaw_cd, use_yaw_rate, yaw_rate_cds, relative_yaw);
+ 
++    // Gaussian-weighted moving average over recent velocity commands so the
++    // applied target stays smooth when the incoming setpoints are noisy
++    constexpr uint8_t VEL_FILT_SIZE = 5;
++    // normalized one-sided Gaussian kernel (sigma = 1.5 samples), newest first
++    static const float vel_filt_weights[VEL_FILT_SIZE] = {0.4209f, 0.3370f, 0.1731f, 0.0570f, 0.0120f};
++    static Vector3f vel_window[VEL_FILT_SIZE];
++    static uint8_t vel_window_idx;
++    vel_window[vel_window_idx] = velocity;
++    Vector3f vel_filtered;
++    for (uint8_t i = 0; i < VEL_FILT_SIZE; i++) {
++        // walk back from the newest sample, wrapping around the ring
++        const uint8_t j = (vel_window_idx + VEL_FILT_SIZE - i) % VEL_FILT_SIZE;
++        vel_filtered += vel_window[j] * vel_filt_weights[i];
++    }
++    vel_window_idx = (vel_window_idx + 1) % VEL_FILT_SIZE;
++
+     // set velocity and acceleration targets and zero position
+     guided_pos_target_cm.zero();
+     guided_pos_terrain_alt = false;
+-    guided_vel_target_cms = velocity;
++    guided_vel_target_cms = vel_filtered;
+     guided_accel_target_cmss = acceleration;
+     update_time_ms = millis();
+ 

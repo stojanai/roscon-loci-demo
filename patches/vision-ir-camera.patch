@@ -1,0 +1,223 @@
+diff --git a/ArduCopter/Copter.cpp b/ArduCopter/Copter.cpp
+index 83e6acc..0d11c3f 100644
+--- a/ArduCopter/Copter.cpp
++++ b/ArduCopter/Copter.cpp
+@@ -186,6 +186,8 @@ const AP_Scheduler::Task Copter::scheduler_tasks[] = {
+ #if AP_SERVORELAYEVENTS_ENABLED
+     SCHED_TASK_CLASS(AP_ServoRelayEvents,  &copter.ServoRelayEvents,      update_events, 50,  75,  60),
+ #endif
++    // infrared camera monitoring
++    SCHED_TASK_CLASS(VisionIR,             &copter.vision_ir,           update,          10, 200,  63),
+ #if AC_PRECLAND_ENABLED
+     SCHED_TASK(update_precland,      400,     50,  69),
+ #endif
+diff --git a/ArduCopter/Copter.h b/ArduCopter/Copter.h
+index 1a65381..6438602 100644
+--- a/ArduCopter/Copter.h
++++ b/ArduCopter/Copter.h
+@@ -129,6 +129,8 @@
+ 
+ #include <AP_Camera/AP_Camera.h>
+ 
++#include "vision_ir.h"          // infrared camera monitoring
++
+ #if HAL_BUTTON_ENABLED
+  # include <AP_Button/AP_Button.h>
+ #endif
+@@ -519,6 +521,9 @@ private:
+     AC_Sprayer sprayer;
+ #endif
+ 
++    // Infrared camera monitoring
++    VisionIR vision_ir;
++
+     // Parachute release
+ #if HAL_PARACHUTE_ENABLED
+     AP_Parachute parachute;
+diff --git a/ArduCopter/vision_ir.cpp b/ArduCopter/vision_ir.cpp
+new file mode 100644
+index 0000000..a56085a
+--- /dev/null
++++ b/ArduCopter/vision_ir.cpp
+@@ -0,0 +1,122 @@
++#include "Copter.h"
++
++/*
++  VisionIR — infrared camera monitoring controller
++
++  Reads an AMG8833-style 8x8 thermal array over I2C at 10Hz, computes
++  frame statistics and raises a throttled GCS warning when pixels exceed
++  the hotspot threshold.
++ */
++
++// AMG8833 register map (subset)
++#define AMG8833_REG_PCTL    0x00    // power control
++#define AMG8833_REG_FPSC    0x02    // frame rate
++#define AMG8833_REG_PIXEL   0x80    // start of 64 x 2-byte pixel registers
++#define AMG8833_PCTL_NORMAL 0x00
++#define AMG8833_FPS_10      0x00
++#define AMG8833_PIXEL_SCALE 0.25f   // degC per LSB, 12-bit signed
++
++extern const AP_HAL::HAL& hal;
++
++// one-time sensor setup: normal power mode, 10 frames per second
++bool VisionIR::init()
++{
++    _dev = hal.i2c_mgr->get_device(IR_I2C_BUS, IR_I2C_ADDR);
++    if (!_dev) {
++        return false;
++    }
++    WITH_SEMAPHORE(_dev->get_semaphore());
++    _dev->set_retries(2);
++    if (!_dev->write_register(AMG8833_REG_PCTL, AMG8833_PCTL_NORMAL) ||
++        !_dev->write_register(AMG8833_REG_FPSC, AMG8833_FPS_10)) {
++        return false;
++    }
++    return true;
++}
++
++// read one 8x8 frame; returns false on transfer failure
++bool VisionIR::read_frame()
++{
++    uint8_t raw[IR_ROWS * IR_COLS * 2];
++    {
++        WITH_SEMAPHORE(_dev->get_semaphore());
++        if (!_dev->read_registers(AMG8833_REG_PIXEL, raw, sizeof(raw))) {
++            return false;
++        }
++    }
++    for (uint8_t i = 0; i < IR_ROWS * IR_COLS; i++) {
++        // little-endian, 12-bit signed at 0.25 degC per LSB
++        const uint16_t u = (uint16_t)((raw[2 * i + 1] << 8) | raw[2 * i]);
++        const int16_t v = (int16_t)(u << 4) >> 4;
++        _frame_c[i / IR_COLS][i % IR_COLS] = v * AMG8833_PIXEL_SCALE;
++    }
++    return true;
++}
++
++// frame statistics and hotspot count
++void VisionIR::process_frame()
++{
++    float min_c = _frame_c[0][0];
++    float max_c = _frame_c[0][0];
++    float sum_c = 0.0f;
++    uint8_t hotspots = 0;
++
++    for (uint8_t r = 0; r < IR_ROWS; r++) {
++        for (uint8_t c = 0; c < IR_COLS; c++) {
++            const float t = _frame_c[r][c];
++            min_c = MIN(min_c, t);
++            max_c = MAX(max_c, t);
++            sum_c += t;
++            if (t >= HOTSPOT_THRESHOLD_C) {
++                hotspots++;
++            }
++        }
++    }
++
++    _min_c = min_c;
++    _max_c = max_c;
++    _mean_c = sum_c / (IR_ROWS * IR_COLS);
++    _hotspot_count = hotspots;
++}
++
++// throttled GCS alert and logging
++void VisionIR::report()
++{
++    const uint32_t now_ms = AP_HAL::millis();
++    if (_hotspot_count > 0 && now_ms - _last_report_ms >= REPORT_INTERVAL_MS) {
++        _last_report_ms = now_ms;
++        gcs().send_text(MAV_SEVERITY_WARNING, "VisionIR: %u hotspots, max %.1fC",
++                        (unsigned)_hotspot_count, (double)_max_c);
++    }
++
++#if HAL_LOGGING_ENABLED
++    // @LoggerMessage: VIR
++    // @Description: VisionIR infrared camera frame statistics
++    AP::logger().WriteStreaming("VIR", "TimeUS,TMin,TMax,TMean,Hot,Hlth",
++                                "QfffBB",
++                                AP_HAL::micros64(),
++                                (double)_min_c, (double)_max_c, (double)_mean_c,
++                                _hotspot_count, (uint8_t)_healthy);
++#endif
++}
++
++// scheduler entry, 10Hz
++void VisionIR::update()
++{
++    if (!_init_done) {
++        _init_done = true;
++        _healthy = init();
++    }
++    if (!_dev) {
++        // no sensor found at init; nothing to monitor
++        return;
++    }
++    if (!read_frame()) {
++        _healthy = false;
++        return;
++    }
++    _healthy = true;
++    _last_frame_ms = AP_HAL::millis();
++    process_frame();
++    report();
++}
+diff --git a/ArduCopter/vision_ir.h b/ArduCopter/vision_ir.h
+new file mode 100644
+index 0000000..cb09b4a
+--- /dev/null
++++ b/ArduCopter/vision_ir.h
+@@ -0,0 +1,53 @@
++#pragma once
++
++#include <AP_Common/AP_Common.h>
++#include <AP_HAL/AP_HAL.h>
++#include <AP_HAL/I2CDevice.h>
++#include <AP_HAL/utility/OwnPtr.h>
++
++/*
++  VisionIR: infrared camera monitoring controller
++
++  Polls an AMG8833-style 8x8 thermal array over I2C, computes frame
++  statistics (min/max/mean temperature), counts hotspot pixels above a
++  threshold and raises a throttled GCS warning when hotspots are seen.
++ */
++class VisionIR {
++public:
++    VisionIR() {}
++
++    CLASS_NO_COPY(VisionIR);
++
++    // called at 10Hz from the scheduler
++    void update();
++
++    bool healthy() const { return _healthy; }
++    bool hotspot_detected() const { return _hotspot_count > 0; }
++    float max_temperature_C() const { return _max_c; }
++
++private:
++    static constexpr uint8_t IR_ROWS = 8;
++    static constexpr uint8_t IR_COLS = 8;
++    static constexpr uint8_t IR_I2C_BUS = 0;
++    static constexpr uint8_t IR_I2C_ADDR = 0x69;        // AMG8833 default
++    static constexpr float HOTSPOT_THRESHOLD_C = 60.0f;
++    static constexpr uint32_t REPORT_INTERVAL_MS = 5000;
++
++    bool init();
++    bool read_frame();
++    void process_frame();
++    void report();
++
++    AP_HAL::OwnPtr<AP_HAL::I2CDevice> _dev;
++    bool _init_done;
++    bool _healthy;
++
++    float _frame_c[IR_ROWS][IR_COLS];
++    float _min_c;
++    float _max_c;
++    float _mean_c;
++    uint8_t _hotspot_count;
++
++    uint32_t _last_frame_ms;
++    uint32_t _last_report_ms;
++};

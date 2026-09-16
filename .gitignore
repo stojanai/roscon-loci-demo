@@ -18,3 +18,12 @@ report-*-darwin.md
 
 # OS cruft
 .DS_Store
+
+report-*-darwin.md
+*.paths.json
+
+# LOCI demo: SITL mission-upload helper log
+mission/last_upload.log
+
+# Conference outreach / sales targeting — internal, not published
+roscon-2026-*.csv
