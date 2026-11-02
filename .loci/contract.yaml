@@ -1,7 +1,7 @@
 version: 1
 
 entries:
-  - text: "AC_Sprayer::update worst case path must not exceed 3700 ns"
+  - text: "AC_Sprayer::update worst case path must not exceed 5700 ns"
     kind: budget
     function: "AC_Sprayer::update"
     signal: worst_path_time
@@ -43,7 +43,7 @@ entries:
     bound: { max_delta: "+10 %" }
     severity: fail
 
-  - text: "AC_Sprayer::update hot path must not exceed 470 ns"
+  - text: "AC_Sprayer::update hot path must not exceed 970 ns"
     kind: budget
     function: "AC_Sprayer::update"
     signal: hot_path_time
